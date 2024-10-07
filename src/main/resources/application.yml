@@ -1,0 +1,14 @@
+eureka:
+  instance:
+  #    prefer-ip-address: true
+  client:
+    registerWithEureka: false
+    fetchRegistry: false
+    server:
+      waitTimeInMsWhenSyncEmpty: 0
+
+spring:
+  cloud:
+    service-registry:
+      auto-registration:
+        fail-fast: true
