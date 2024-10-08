@@ -12,8 +12,20 @@ jobs:
     env:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+#      AWS_ACCESS_KEY: ${{ secrets.AWS_ACCESS_KEY }}
+#      AWS_SECRET_KEY: ${{ secrets.AWS_SECRET_KEY }}
+      CLUSTER_NAME: "DevCluster"
+      TASKDEF_NAME: "naming-service"
+      SERVICE_NAME: "naming-service"
 
     steps:
+    - name: Configure AWS Creds
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY }}
+        aws-region: us-east-1
+
     - name: Checkout code
       uses: actions/checkout@v3
 
@@ -35,3 +47,18 @@ jobs:
           chmod +x ./gradlew
           ./gradlew clean build jib --image=docker.io/${{ secrets.DOCKER_USERNAME }}/naming-service:latest
 
+    - name: Get Task Defination From ECS
+      run: |
+        aws ecs describe-task-definition --task-definition $TASKDEF_NAME > task-def.json
+        jq .taskDefinition task-def.json > taskdefinition.json
+        jq 'del(.taskDefinitionArn)' taskdefinition.json | jq 'del(.revision)' | jq 'del(.status)' | jq 'del(.requiresAttributes)' | jq 'del(.compatibilities)' | jq 'del(.registeredAt)'| jq 'del(.registeredBy)' > container-definition.json
+        jq '.containerDefinitions[0].image = "docker.io/${{ secrets.DOCKER_USERNAME }}/naming-service:latest"' container-definition.json > temp-taskdef.json
+
+    - name: Deploy Amazon ECS task definition
+      uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+      with:
+        task-definition: temp-taskdef.json
+        service: ${{env.SERVICE_NAME}}
+        cluster: ${{env.CLUSTER_NAME}}
+        wait-for-service-stability: true
+        wait-for-minutes: 5
